@@ -1,0 +1,57 @@
+# Root GitIgnore for SmartSelect Monorepo
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node / Frontend Build
+SmartSelectFrontend/node_modules/
+SmartSelectFrontend/dist/
+SmartSelectFrontend/dist-ssr/
+SmartSelectFrontend/*.local
+
+# Maven / Java Build
+SmartSelectBackend/target/
+SmartSelectBackend/.mvn/wrapper/maven-wrapper.jar
+!**/src/main/**/target/
+!**/src/test/**/target/
+SmartSelectBackend/build/
+!**/src/main/**/build/
+!**/src/test/**/build/
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.iws
+*.iml
+*.ipr
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.classpath
+.project
+.settings
+.factorypath
+.apt_generated
+.springBeans
+.sts4-cache
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Environment Files
+.env
+.env.local
+.env.production
+.env.development
+.env.staging
