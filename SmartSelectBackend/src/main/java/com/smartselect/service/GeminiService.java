@@ -33,8 +33,8 @@ public class GeminiService {
      * Calls Gemini 1.5 Flash and returns a list of:
      * { "name": "...", "reason": "..." } objects for top 5 products.
      */
-    public List<Map<String, String>> getProductSuggestions(RecommendationRequest req) {
-        String prompt = buildPrompt(req);
+    public List<Map<String, String>> getProductSuggestions(RecommendationRequest req, int dynamicMin) {
+        String prompt = buildPrompt(req, dynamicMin);
         String url    = baseUrl;
 //
 //        // Build Gemini request body
@@ -86,23 +86,27 @@ public class GeminiService {
 
     // ── Prompt Builder ────────────────────────────────────────────────────────
 
-    private String buildPrompt(RecommendationRequest req) {
+    private String buildPrompt(RecommendationRequest req, int dynamicMin) {
         int maxBudget = req.getBudget();
-        int minBudget = (int) (maxBudget * 0.85);
+        int minBudget = Math.max(dynamicMin, (int) (maxBudget * 0.5));
         StringBuilder sb = new StringBuilder();
         sb.append("You are a smart product recommendation AI for Indian consumers.\n\n");
         sb.append("A user wants to buy a ").append(req.getCategory()).append(".\n");
+
+        // Inject modern model context for 2026
+        sb.append("\nCONTEXT FOR CURRENT YEAR 2026:\n");
+        sb.append("You must only suggest modern, active models that are in stock on Amazon India in 2026. Do NOT suggest older discontinued models. Here is a list of active models for each brand:\n");
+        sb.append("- Apple: iPhone 16 Pro Max, iPhone 16 Pro, iPhone 16 Plus, iPhone 16, iPhone 15 Pro Max, iPhone 15 Pro, iPhone 15 Plus, iPhone 15, iPhone 16e, iPhone Air.\n");
+        sb.append("- Samsung: Galaxy S26 Ultra, Galaxy S26, Galaxy S25 Ultra, Galaxy S25, Galaxy S24 Ultra, Galaxy S24, Galaxy S23 FE, Galaxy A55, Galaxy A35.\n");
+        sb.append("- OnePlus: OnePlus 13, OnePlus 13R, OnePlus 12, OnePlus 12R, OnePlus Nord 4.\n");
+        sb.append("- Laptop: Recommend modern laptops with recent processors (e.g. Intel Core Ultra, Intel 13th/14th Gen, AMD Ryzen 7000/8000/9000 series, Apple M2/M3/M4 chips). Avoid older 10th/11th Gen Intel processors.\n\n");
 
 // Tell the AI to use a RANGE, not just a max budget
         sb.append("Target Price Range: ₹").append(minBudget).append(" to ₹").append(maxBudget).append("\n");
         sb.append("Profession: ").append(req.getProfession()).append("\n");
         sb.append("Usage/Needs: ").append(req.getUsage()).append("\n");
 
-// Make the constraint extremely aggressive
-        sb.append("CRITICAL RULES:\n");
-        sb.append("1. ALL recommended products MUST have a current market price strictly between ₹").append(minBudget).append(" and ₹").append(maxBudget).append(".\n");
-        sb.append("2. DO NOT suggest products under ₹").append(minBudget).append(". The user wants premium features for their budget.\n");
-        sb.append("3. DO NOT exceed ₹").append(maxBudget).append(".\n");
+// Price constraints
         sb.append("CRITICAL RULES:\n");
         sb.append("1. ALL recommended products MUST have a current market price strictly between ₹").append(minBudget).append(" and ₹").append(maxBudget).append(".\n");
         sb.append("2. DO NOT suggest products under ₹").append(minBudget).append(". The user wants premium features for their budget.\n");
@@ -128,7 +132,7 @@ public class GeminiService {
         // FIX 2: Strict instruction added to stop Gemini from breaking JSON with internal quotes
         sb.append("""
  
-Respond with ONLY a valid JSON array of exactly 5 objects. No markdown, no explanation.
+Respond with ONLY a valid JSON array of exactly 8 objects. No markdown, no explanation.
 
 IMPORTANT JSON FORMATTING RULES:
 1. You MUST wrap all JSON keys and string values in standard double quotes (e.g., "name": "Value").
