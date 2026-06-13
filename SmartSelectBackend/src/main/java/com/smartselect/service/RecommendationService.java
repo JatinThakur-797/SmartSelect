@@ -105,11 +105,98 @@ public class RecommendationService {
             // Delete any stale entry for this key
             cacheRepo.findByCacheKey(cacheKey).ifPresent(cacheRepo::delete);
 
-            // Call Gemini for product names + reasons
-            List<Map<String, String>> geminiProducts = geminiService.getProductSuggestions(req);
+            // Call Gemini for product names + reasons with dynamic min budget
+            List<Map<String, String>> geminiProducts = geminiService.getProductSuggestions(req, dynamicMin);
+
+            // Compute minBudget for Amazon filtering matching Gemini's prompt range
+            int minBudget = Math.max(dynamicMin, (int) (req.getBudget() * 0.5));
 
             // Fetch real Amazon data in parallel
-            products  = amazonService.fetchProductsInParallel(geminiProducts, req.getCategory(), req.getBudget());
+            List<ProductDto> fetched = amazonService.fetchProductsInParallel(geminiProducts, req.getCategory(), minBudget, req.getBudget());
+            
+            List<ProductDto> finalProducts = new ArrayList<>();
+            if (fetched != null) {
+                finalProducts.addAll(fetched);
+            }
+
+            // If we have fewer than 5 products, harvest more candidates from a general Amazon search
+            if (finalProducts.size() < 5) {
+                log.info("Only found {} products from specific suggestions. Harvesting from general search...", finalProducts.size());
+                
+                String generalQuery = "";
+                String brandPref = req.getBrandPreference();
+                if (notBlank(brandPref) && !"Any".equalsIgnoreCase(brandPref)) {
+                    generalQuery = brandPref;
+                }
+                if ("laptop".equalsIgnoreCase(req.getCategory())) {
+                    generalQuery = generalQuery.isEmpty() ? "laptop" : generalQuery + " laptop";
+                } else {
+                    generalQuery = generalQuery.isEmpty() ? "smartphone" : generalQuery + " phone";
+                }
+
+                List<ProductDto> generalCandidates = amazonService.searchAmazonProductsGeneral(generalQuery, req.getCategory(), minBudget, req.getBudget());
+
+                // Find unused Gemini reasons & specs to assign to general candidates
+                java.util.Set<String> usedReasons = new java.util.HashSet<>();
+                for (ProductDto fp : finalProducts) {
+                    if (fp.getAiReason() != null) {
+                        usedReasons.add(fp.getAiReason());
+                    }
+                }
+
+                List<Map<String, String>> unusedGemini = new ArrayList<>();
+                for (Map<String, String> gp : geminiProducts) {
+                    String reason = gp.get("reason");
+                    if (reason != null && !usedReasons.contains(reason)) {
+                        unusedGemini.add(gp);
+                    }
+                }
+
+                int unusedIndex = 0;
+                for (ProductDto candidate : generalCandidates) {
+                    if (finalProducts.size() >= 5) {
+                        break;
+                    }
+
+                    boolean isDuplicate = false;
+                    for (ProductDto fp : finalProducts) {
+                        if (candidate.getAsin() != null && !candidate.getAsin().isBlank() && candidate.getAsin().equalsIgnoreCase(fp.getAsin())) {
+                            isDuplicate = true;
+                            break;
+                        }
+                        if (candidate.getName().equalsIgnoreCase(fp.getName())) {
+                            isDuplicate = true;
+                            break;
+                        }
+                    }
+                    if (isDuplicate) {
+                        continue;
+                    }
+
+                    if (unusedIndex < unusedGemini.size()) {
+                        Map<String, String> gp = unusedGemini.get(unusedIndex);
+                        candidate.setAiReason(gp.get("reason"));
+                        String specsPipe = gp.get("specs");
+                        if (specsPipe != null && !specsPipe.isBlank()) {
+                            candidate.setSpecs(new ArrayList<>(java.util.Arrays.asList(specsPipe.split("\\|"))));
+                        } else {
+                            candidate.setSpecs(new ArrayList<>());
+                        }
+                        unusedIndex++;
+                    } else {
+                        candidate.setAiReason("This high-quality option fits your requirements and budget perfectly.");
+                        candidate.setSpecs(new ArrayList<>(java.util.Arrays.asList("Premium design", "High performance", "Reliable battery")));
+                    }
+
+                    finalProducts.add(candidate);
+                }
+            }
+
+            if (finalProducts.size() > 5) {
+                products = new ArrayList<>(finalProducts.subList(0, 5));
+            } else {
+                products = finalProducts;
+            }
             fromCache = false;
 
             // Persist to shared cache so next users benefit
@@ -117,7 +204,11 @@ public class RecommendationService {
         }
 
         if (products == null || products.size() < 3) {
-            throw new IllegalArgumentException("No products found within your budget range (₹" + String.format("%,d", req.getBudget()) + "). Devices matching your specifications generally start around ₹" + String.format("%,d", dynamicMin) + ". Please consider increasing your budget to find matching products.");
+            if (req.getBudget() > dynamicMin) {
+                throw new IllegalArgumentException("We couldn't find enough matching products within your budget range (₹" + String.format("%,d", req.getBudget()) + "). Please try relaxing your specifications (like brand preference or RAM) to get better recommendations.");
+            } else {
+                throw new IllegalArgumentException("No products found within your budget range (₹" + String.format("%,d", req.getBudget()) + "). Devices matching your specifications generally start around ₹" + String.format("%,d", dynamicMin) + ". Please consider increasing your budget to find matching products.");
+            }
         }
 
         // 5. Always save to user's personal history (dashboard)
