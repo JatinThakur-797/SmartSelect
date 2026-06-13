@@ -422,31 +422,41 @@ export default function RecommendationFormPage() {
       {showModal && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4 z-50 transition-opacity">
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-gray-100 transform scale-100 transition-all">
-            <h2 className="text-xl font-bold text-gray-905 text-gray-900 mb-2 flex items-center gap-2">
-              ⚠️ Adjust Recommendation Budget
+            <h2 className="text-xl font-bold text-gray-900 mb-2 flex items-center gap-2">
+              {suggestedMinBudget && suggestedMinBudget > form.budget ? '⚠️ Adjust Recommendation Budget' : '🔍 No Matching Products Found'}
             </h2>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
               {modalMessage}
             </p>
             <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="btn-secondary flex-1 py-3 text-sm"
-              >
-                Cancel
-              </button>
-              {suggestedMinBudget && (
+              {suggestedMinBudget && suggestedMinBudget > form.budget ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setShowModal(false)}
+                    className="btn-secondary flex-1 py-3 text-sm"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      set('budget', suggestedMinBudget);
+                      setShowModal(false);
+                      setError('');
+                    }}
+                    className="btn-primary flex-1 py-3 text-sm"
+                  >
+                    Increase Budget to {formatBudget(suggestedMinBudget)}
+                  </button>
+                </>
+              ) : (
                 <button
                   type="button"
-                  onClick={() => {
-                    set('budget', suggestedMinBudget);
-                    setShowModal(false);
-                    setError('');
-                  }}
-                  className="btn-primary flex-1 py-3 text-sm"
+                  onClick={() => setShowModal(false)}
+                  className="btn-primary w-full py-3 text-sm font-semibold"
                 >
-                  Increase Budget to {formatBudget(suggestedMinBudget)}
+                  Adjust Specifications
                 </button>
               )}
             </div>
