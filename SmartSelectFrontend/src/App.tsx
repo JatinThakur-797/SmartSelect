@@ -1,3 +1,4 @@
+import { Analytics } from '@vercel/analytics/react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -34,6 +35,7 @@ export default function App() {
             </Routes>
           </main>
         </div>
+        <Analytics />
       </BrowserRouter>
     </AuthProvider>
   );
